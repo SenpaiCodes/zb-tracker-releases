@@ -40,6 +40,9 @@ const NEUTRAL_PAYOUT = {
   maxPayoutPct: 0,
   maxProfitPct: 0,
   split: 100,
+  firstGoal: 0,
+  nextGoal: 0,
+  consistencySteps: [],
 };
 
 function normalizeRules(r) {
@@ -68,6 +71,11 @@ function normalizeRules(r) {
       maxPayoutPct: Math.max(0, Math.min(100, num(pay.maxPayoutPct))),
       maxProfitPct: Math.max(0, Math.min(100, num(pay.maxProfitPct))),
       split: pay.split === undefined ? 100 : Math.max(0, Math.min(100, num(pay.split))),
+      firstGoal: num(pay.firstGoal),
+      nextGoal: num(pay.nextGoal),
+      consistencySteps: Array.isArray(pay.consistencySteps)
+        ? pay.consistencySteps.map(num).filter((n) => n > 0)
+        : [],
     },
   };
 }

@@ -467,3 +467,126 @@ test("a LucidFlex payout is half the profit, capped by account size", () => {
   assert.equal(big.payout.maxPayout, 2000);
   assert.equal(big.payout.maxProfitPct, 50);
 });
+
+test("Tradeify Lightning gates on a profit goal, not winning days", () => {
+  const rules = rulesFor("tradeify", "lightning", 50000);
+  assert.equal(rules.payout.minWinDays, 0, "Lightning has no minimum day count");
+  assert.equal(rules.payout.firstGoal, 3000, "first payout unlocks at $3,000");
+  assert.equal(rules.payout.nextGoal, 2000, "each one after at $2,000");
+  assert.equal(rules.payout.minPayout, 1000);
+  assert.equal(rules.payout.split, 90);
+  assert.deepEqual(rules.payout.consistencySteps, [20, 25, 30]);
+
+  // Six even days, so the best is 16.7% of the profit and clears Lightning's
+  // 20% first-payout consistency limit. Four equal days would not — which is
+  // the rule doing its job, not a bug.
+  const acct = (net: number, payouts: { id: string; date: string; amount: number; consumed?: string[] }[] = []) => {
+    const days = Array.from({ length: 6 }, (_, i) =>
+      day(`2026-11-0${i + 1}`, net / 6, 1, 0, "funded"),
+    );
+    return {
+      st: accountStatus(
+        account({
+          name: "Lightning 50K",
+          plan: "lightning",
+          firm: "tradeify",
+          size: 50000,
+          start: 50000,
+          phase: "funded",
+          passedOn: null,
+          rules,
+          payouts,
+        }),
+        days,
+        0,
+      ),
+      days,
+    };
+  };
+
+  // Under the first goal. (Divisible by six, so the arithmetic is exact.)
+  let { st } = acct(2400);
+  assert.equal(st.cycleGoal, 3000);
+  assert.equal(st.cycleNet, 2400);
+  assert.equal(st.payoutReady, false);
+  assert.match(st.payoutBlockers[0], /\$600 more profit — \$2,400 of \$3,000/);
+
+  // Over it. The 50K holds a $2,100 buffer over the drawdown, so the request
+  // itself is capped well below the profit.
+  st = acct(4800).st;
+  assert.equal(st.cycleNet, 4800);
+  assert.deepEqual(st.payoutBlockers, []);
+  assert.equal(st.payoutReady, true);
+});
+
+test("Lightning's goal resets to the lower figure after a payout", () => {
+  const rules = rulesFor("tradeify", "lightning", 50000);
+  const first = Array.from({ length: 6 }, (_, i) =>
+    day(`2026-11-0${i + 1}`, 800, 1, 0, "funded"),
+  );
+  const acc = account({
+    name: "Lightning 50K",
+    firm: "tradeify",
+    plan: "lightning",
+    size: 50000,
+    start: 50000,
+    phase: "funded",
+    passedOn: null,
+    rules,
+    payouts: [
+      { id: "p", date: "2026-11-05", amount: 1000, consumed: first.map((d) => d.id) },
+    ],
+  });
+
+  // The $3,200 that unlocked the first payout is spent; nothing carries over.
+  let st = accountStatus(acc, first, 0);
+  assert.equal(st.cycleGoal, 2000, "subsequent cycles want $2,000");
+  assert.equal(st.cycleNet, 0, "leftover profit does not carry");
+  assert.equal(st.payoutReady, false);
+
+  // Fresh profit counts toward it — spread over enough days to satisfy the 25%
+  // limit that applies once one payout has been taken.
+  const more = Array.from({ length: 5 }, (_, i) =>
+    day(`2026-11-1${i}`, 520, 1, 0, "funded"),
+  );
+  st = accountStatus(acc, [...first, ...more], 0);
+  assert.equal(st.cycleNet, 2600);
+  assert.equal(st.consistencyLimit, 25, "the limit loosened after the first payout");
+  assert.equal(st.payoutReady, true);
+});
+
+test("Lightning's consistency rule loosens as you get paid", () => {
+  const rules = rulesFor("tradeify", "lightning", 50000);
+  const base = {
+    name: "Lightning 50K",
+    firm: "tradeify",
+    plan: "lightning",
+    size: 50000,
+    start: 50000,
+    phase: "funded" as const,
+    passedOn: null,
+    rules,
+  };
+  const days = [day("2026-11-01", 1200, 1, 0, "funded"), day("2026-11-02", 3800, 1, 0, "funded")];
+  // Best day is 3,800 of 5,000 — 76%. Under every step, but the limit itself
+  // has to move with the payout count.
+  const at = (n: number) =>
+    accountStatus(
+      account({
+        ...base,
+        payouts: Array.from({ length: n }, (_, i) => ({
+          id: `p${i}`,
+          date: "2026-10-01",
+          amount: 1000,
+          consumed: [],
+        })),
+      }),
+      days,
+      0,
+    );
+
+  assert.equal(at(0).consistencyLimit, 20, "first payout");
+  assert.equal(at(1).consistencyLimit, 25, "second");
+  assert.equal(at(2).consistencyLimit, 30, "third");
+  assert.equal(at(7).consistencyLimit, 30, "and stays there");
+});

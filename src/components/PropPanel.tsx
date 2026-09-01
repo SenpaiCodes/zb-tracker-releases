@@ -189,7 +189,34 @@ export default function PropPanel({ account, allDays, breakevenBand }: Props) {
         </div>
       ) : null}
 
-      {/* --- payout progress --------------------------------------------------- */}
+      {/* --- payout progress: a profit goal, where the firm uses one --------- */}
+      {account.phase === "funded" && !st.winDaysNeeded && st.cycleGoal ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 9, minWidth: 0 }}>
+          <div style={caption()}>Toward the next payout</div>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+            <span
+              style={{
+                fontFamily: MONO,
+                fontSize: 22,
+                fontWeight: 500,
+                letterSpacing: -0.6,
+                color: st.cycleNet >= st.cycleGoal ? C.pos : C.mute,
+              }}
+            >
+              {money(st.cycleNet)}
+            </span>
+            <span style={{ fontSize: 11.5, color: C.faint }}>of {signed(st.cycleGoal)}</span>
+          </div>
+          <Bar value={st.cycleNet / st.cycleGoal} tone={C.pos} />
+          <span style={{ fontSize: 11, color: st.payoutReady ? C.pos : C.faintest }}>
+            {st.payoutReady
+              ? `Payout ready — up to ${signed(st.maxRequest)}.`
+              : st.payoutBlockers[0] || "Keep going."}
+          </span>
+        </div>
+      ) : null}
+
+      {/* --- payout progress: winning days ----------------------------------- */}
       {account.phase === "funded" && st.winDaysNeeded ? (
         <div style={{ display: "flex", flexDirection: "column", gap: 9, minWidth: 0 }}>
           <div style={caption()}>Winning days</div>

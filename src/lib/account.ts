@@ -13,6 +13,9 @@ const NO_PAYOUT: PayoutRules = {
   maxPayoutPct: 0,
   maxProfitPct: 0,
   split: 100,
+  firstGoal: 0,
+  nextGoal: 0,
+  consistencySteps: [],
 };
 
 // Everything derived about an account: how the evaluation is going, where the
@@ -75,6 +78,10 @@ export type AccountStatus = {
   canPayout: boolean;
   /** Days in this phase clearing the firm's minimum for a winning day. */
   winDays: number;
+  /** Profit earned since the last payout — what a cycle's goal is measured on. */
+  cycleNet: number;
+  /** Profit the firm wants this cycle before it will pay. 0 when none. */
+  cycleGoal: number;
   /** How many the firm wants before it will pay. */
   winDaysNeeded: number;
   /**
@@ -182,7 +189,12 @@ export function accountStatus(
   const wins = phaseDays.filter((d) => dayKind(d.net, breakevenBand) === "win");
   const grossWin = wins.reduce((a, d) => a + d.net, 0);
   const bestDay = wins.length ? Math.max(...wins.map((d) => d.net)) : 0;
-  const limit = rules?.consistencyPct || 0;
+  // A few firms loosen the consistency rule as you get paid, so the limit
+  // depends on how many payouts have already been taken.
+  const steps = rules?.payout?.consistencySteps || [];
+  const limit = steps.length
+    ? steps[Math.min((account.payouts || []).length, steps.length - 1)]
+    : rules?.consistencyPct || 0;
 
   const consistency = limit > 0 && grossWin > 0 ? bestDay / grossWin : null;
   const consistencyOk = consistency === null ? true : consistency <= limit / 100;
@@ -210,6 +222,11 @@ export function accountStatus(
   );
   const winDays = countable.filter((d) => d.net >= Math.max(pay.minWinDay, 0.01)).length;
   const hasPaid = payouts.length > 0;
+
+  // Some firms gate on profit earned *this cycle* rather than on winning days,
+  // and reset it at every payout: what was left over does not carry forward.
+  const cycleNet = countable.reduce((a, d) => a + d.net, 0);
+  const cycleGoal = hasPaid ? pay.nextGoal || pay.firstGoal : pay.firstGoal;
   const payoutFloor = (floor ?? phaseStart - (rules?.maxLoss || 0)) + pay.buffer;
 
   // Every cap applied at once — you can only have the smallest of them.
@@ -232,8 +249,15 @@ export function accountStatus(
         } — ${winDays} of ${pay.minWinDays}${hasPaid ? " since your last payout" : ""}.`,
       );
     }
+    if (cycleGoal && cycleNet < cycleGoal) {
+      payoutBlockers.push(
+        `${fmt(cycleGoal - cycleNet)} more profit${
+          hasPaid ? " this cycle" : ""
+        } — ${fmt(Math.max(0, cycleNet))} of ${fmt(cycleGoal)}.`,
+      );
+    }
     if (!consistencyOk) {
-      payoutBlockers.push("The consistency rule isn't met yet.");
+      payoutBlockers.push(`The ${limit}% consistency rule isn't met yet.`);
     }
     if (balance - payoutFloor <= 0) {
       payoutBlockers.push(
@@ -262,6 +286,8 @@ export function accountStatus(
     canPayout: isProp && account.phase === "funded" && withdrawable > 0,
     winDays,
     winDaysNeeded: pay.minWinDays,
+    cycleNet,
+    cycleGoal,
     payoutFloor,
     maxRequest,
     payoutReady: isProp && payoutBlockers.length === 0 && maxRequest > 0,

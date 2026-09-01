@@ -37,6 +37,22 @@ export type PayoutRules = {
   maxProfitPct: number;
   /** Your share of the profit, as a percentage. */
   split: number;
+  /**
+   * Profit that must be earned before the *first* payout. 0 when the firm gates
+   * on winning days instead.
+   */
+  firstGoal: number;
+  /**
+   * Profit needed before each payout after the first. Firms reset this per
+   * cycle — what is left over from the previous one does not carry.
+   * 0 falls back to `firstGoal`.
+   */
+  nextGoal: number;
+  /**
+   * Consistency limit by payout number, when it changes as you get paid.
+   * Tradeify Lightning relaxes 20% → 25% → 30%. Empty uses `consistencyPct`.
+   */
+  consistencySteps: number[];
 };
 
 export type AccountRules = {
@@ -64,6 +80,9 @@ export const NO_PAYOUT: PayoutRules = {
   maxPayoutPct: 0,
   maxProfitPct: 0,
   split: 100,
+  firstGoal: 0,
+  nextGoal: 0,
+  consistencySteps: [],
 };
 
 /** Most firms count a winning day by size; this is the shape they share. */
@@ -126,6 +145,28 @@ const lucidPayout = (size: number, buffered: boolean, maxLoss: number): PayoutRu
     maxProfitPct: 50,
     maxPayout: { 25000: 1000, 50000: 2000, 100000: 4000, 150000: 6000 }[size] ?? 1000,
     split: 100,
+  });
+
+/**
+ * Tradeify Lightning. No minimum trading-day count — it gates on profit earned
+ * *this cycle*: $1,500/$3,000/$6,000/$9,000 to unlock the first payout, then
+ * $1,000/$2,000/$3,500/$4,500 for each one after. Leftover profit from the
+ * previous cycle doesn't carry. Consistency relaxes 20% → 25% → 30%.
+ *
+ * The per-request ceiling is $1,000 on a 25K and $3,500 on a 150K; the 50K and
+ * 100K figures are not in Tradeify's public write-ups, so they are left at 0
+ * ("no cap") rather than guessed. Fill them in from your own dashboard.
+ */
+const lightningPayout = (size: number, buffer: number): PayoutRules =>
+  payout({
+    minWinDays: 0,
+    buffer,
+    minPayout: 1000,
+    maxPayout: { 25000: 1000, 50000: 0, 100000: 0, 150000: 3500 }[size] ?? 0,
+    firstGoal: { 25000: 1500, 50000: 3000, 100000: 6000, 150000: 9000 }[size] ?? 1500,
+    nextGoal: { 25000: 1000, 50000: 2000, 100000: 3500, 150000: 4500 }[size] ?? 1000,
+    consistencySteps: [20, 25, 30],
+    split: 90,
   });
 
 /** Tradeify: five qualifying days and a size-scaled minimum request. */
@@ -239,10 +280,10 @@ export const FIRMS: Firm[] = [
         startsFunded: true,
         note: "Instant funded — no target to clear, rule compliance only.",
         rules: {
-          25000: eod(0, 1500, 0, 20, { ...tradeifyPayout(25000, 1600), minPayout: 1000, maxPayout: 1000 }),
-          50000: eod(0, 2000, 0, 20, { ...tradeifyPayout(50000, 2100), minPayout: 1000, maxPayout: 2000 }),
-          100000: eod(0, 3000, 0, 20, { ...tradeifyPayout(100000, 3100), minPayout: 1000, maxPayout: 3000 }),
-          150000: eod(0, 4500, 0, 20, { ...tradeifyPayout(150000, 4600), minPayout: 1000, maxPayout: 4500 }),
+          25000: eod(0, 1500, 0, 20, lightningPayout(25000, 1600)),
+          50000: eod(0, 2000, 0, 20, lightningPayout(50000, 2100)),
+          100000: eod(0, 3000, 0, 20, lightningPayout(100000, 3100)),
+          150000: eod(0, 4500, 0, 20, lightningPayout(150000, 4600)),
         },
       },
     ],

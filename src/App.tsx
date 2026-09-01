@@ -297,6 +297,8 @@ export default function App() {
                 kind: "payout-waiting",
                 winDays: phase.winDays,
                 needed: phase.winDaysNeeded,
+                cycleNet: phase.cycleNet,
+                cycleGoal: phase.cycleGoal,
                 blockers: phase.payoutBlockers,
               };
 
@@ -388,15 +390,12 @@ export default function App() {
             phaseStart={phaseStart}
             phaseFrom={phaseFrom}
             breakevenBand={band}
-            // Phase-scoped, like the days: a withdrawal from before a pass
-            // belongs to the account that no longer exists.
-            payouts={
-              phase && viewAccount
-                ? viewAccount.payouts.filter(
-                    (p) => !viewAccount.passedOn || p.date > viewAccount.passedOn,
-                  )
-                : []
-            }
+            // Every payout still on the account, unfiltered. `setPhase` clears
+            // them when a phase resets, so what remains belongs to this one.
+            // Filtering by date here meant a payout taken on or before the pass
+            // date never reached the dashboard — the sidebar deducted it and the
+            // equity figure didn't, which is as confusing as it sounds.
+            payouts={phase && viewAccount ? viewAccount.payouts : []}
             isEmpty={activeDays.length === 0}
             onShiftMonth={(delta) => setYm((v) => shiftYm(v, delta))}
             onToday={() => setYm(todayYm())}

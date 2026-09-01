@@ -184,6 +184,12 @@ src/lib/store.ts     renderer-side wrapper over the bridge
 - **Payouts date-filter with `>=` the pass date, not `>`.** Passing and
   withdrawing on the same day is ordinary, and `>` silently dropped the payout —
   which looked exactly like the deduction not working.
+- **Some firms gate payouts on a profit goal, not on winning days.** Tradeify
+  Lightning wants $3,000 of profit on a 50K before the first payout and $2,000
+  before each one after, and what is left over does not carry into the next
+  cycle. `cycleNet` / `cycleGoal` on the status express that, measured over the
+  sessions no payout has consumed. Its consistency limit also loosens per payout
+  (20 → 25 → 30), which is `payout.consistencySteps` indexed by payout count.
 - **One balance, computed once.** `App.tsx` derives `accountStatus` and hands
   `balance` to the sidebar rather than letting each view re-add the days — three
   components each doing their own sum is how the sidebar came to disagree with

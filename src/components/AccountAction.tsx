@@ -11,7 +11,15 @@ export type Action =
   /** Ready: `available` is the largest request every firm rule allows. */
   | { kind: "payout"; available: number; minimum: number; buffer: number }
   /** Not there yet — the reasons, in the order they bite. */
-  | { kind: "payout-waiting"; winDays: number; needed: number; blockers: string[] }
+  | {
+      kind: "payout-waiting";
+      winDays: number;
+      needed: number;
+      /** Profit this cycle, when the firm gates on that instead. */
+      cycleNet: number;
+      cycleGoal: number;
+      blockers: string[];
+    }
   | { kind: "retire" }
   | null;
 
@@ -74,6 +82,10 @@ export default function AccountAction({ action, onUpgrade, onPayout, onRetire }:
             <span style={{ fontFamily: MONO, fontSize: 11.5, color: C.faint }}>
               {action.winDays}/{action.needed}
             </span>
+          ) : action.cycleGoal ? (
+            <span style={{ fontFamily: MONO, fontSize: 11.5, color: C.faint }}>
+              {money(action.cycleNet)}/{money(action.cycleGoal)}
+            </span>
           ) : null}
         </span>
 
@@ -90,6 +102,20 @@ export default function AccountAction({ action, onUpgrade, onPayout, onRetire }:
                 }}
               />
             ))}
+          </span>
+        ) : action.cycleGoal ? (
+          // Firms that gate on profit rather than days get a single bar.
+          <span
+            style={{ height: 4, borderRadius: 2, background: C.line2, overflow: "hidden" }}
+          >
+            <span
+              style={{
+                display: "block",
+                height: "100%",
+                width: `${Math.max(0, Math.min(1, action.cycleNet / action.cycleGoal)) * 100}%`,
+                background: C.pos,
+              }}
+            />
           </span>
         ) : null}
 
