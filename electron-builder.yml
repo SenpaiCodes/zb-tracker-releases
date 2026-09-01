@@ -1,0 +1,66 @@
+appId: com.zbtracker.journal
+productName: "Z&B Tracker"
+copyright: "Z&B Tracker"
+
+# There is no update server; the app never phones home. This also stops the
+# build from trying to emit auto-update metadata.
+publish: null
+
+directories:
+  output: release
+  buildResources: build
+
+# Only what the app actually needs at runtime. React, Tesseract and the UI are
+# already bundled into dist/ by Vite, so no node_modules ship at all.
+files:
+  - electron/**/*
+  - dist/**/*
+  - package.json
+
+# The window icon is loaded at runtime, and Electron will not read one out of
+# the asar reliably — a failed read leaves the window wearing Electron's own
+# atom, which is what happened. Ship it as a real file beside the executable.
+extraResources:
+  - from: build/icon.png
+    to: icon.png
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  # A real multi-size .ico rather than letting electron-builder convert a PNG:
+  # the taskbar picks whichever size fits, and 16/24/32 drawn at their own size
+  # read far better than one downscaled 1024.
+  icon: build/icon.ico
+  # Edit the executable so it carries our icon and version metadata, but skip
+  # signing — there is no certificate. `signAndEditExecutable: false` would skip
+  # both, which is what previously left the app wearing Electron's default icon.
+  signExecutable: false
+
+mac:
+  # Unsigned: there is no Apple Developer certificate, so Gatekeeper will need
+  # the right-click → Open dance on first run. A zip rather than a dmg because
+  # dmg creation needs macOS itself (hdiutil), and this builds on Linux.
+  target:
+    - target: zip
+      arch: [x64, arm64]
+  category: public.app-category.finance
+  icon: build/icon.png
+  identity: null
+
+nsis:
+  # One click, no wizard: it installs, makes the shortcuts and launches.
+  oneClick: true
+  perMachine: false
+  runAfterFinish: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: "Z&B Tracker"
+  artifactName: ZB-Tracker-Setup-${version}.${ext}
+  # An existing Z&B Tracker is replaced automatically; installer.nsh also clears
+  # out the older "Tape & Ledger" release, which had a different appId.
+  include: build/installer.nsh
+  allowToChangeInstallationDirectory: false
+  # Journals live in %APPDATA%, not the install folder, so neither upgrading nor
+  # uninstalling takes the user's entries with it.
+  deleteAppDataOnUninstall: false

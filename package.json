@@ -1,0 +1,34 @@
+{
+  "name": "zb-tracker",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Z&B Tracker — a futures trading journal",
+  "author": "Z&B Tracker",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "concurrently -k \"vite\" \"wait-on tcp:5173 && electron .\"",
+    "build": "vite build",
+    "start": "npm run build && electron .",
+    "dist": "npm run build && electron-builder --win",
+    "dist:dir": "npm run build && electron-builder --win --dir",
+    "test": "node --experimental-strip-types --test \"tests/*.test.ts\"",
+    "typecheck": "tsc --noEmit",
+    "setup:tessdata": "node scripts/setup-tessdata.mjs",
+    "postinstall": "node scripts/setup-tessdata.mjs"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/react": "^19.0.2",
+    "@types/react-dom": "^19.0.2",
+    "@vitejs/plugin-react": "^6.1.1",
+    "concurrently": "^9.1.0",
+    "electron": "^44.1.0",
+    "electron-builder": "^26.15.3",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "tesseract.js": "^5.1.1",
+    "typescript": "^5.7.2",
+    "vite": "^8.2.2",
+    "wait-on": "^8.0.1"
+  }
+}

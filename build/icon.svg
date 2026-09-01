@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="badge" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#191E22"/>
+      <stop offset="100%" stop-color="#0B0D0F"/>
+    </linearGradient>
+    <linearGradient id="stroke" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0%" stop-color="#2FB37A"/>
+      <stop offset="100%" stop-color="#4FE3A0"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="256" height="256" rx="58" fill="url(#badge)"/>
+  <rect x="1.5" y="1.5" width="253" height="253" rx="56.5" fill="none" stroke="#ffffff" stroke-opacity="0.07" stroke-width="3"/>
+
+  <!-- The session's own equity curve: one dip, one recovery, one close. -->
+  <path d="M58 176 L104 132 L136 156 L198 86"
+        fill="none" stroke="url(#stroke)" stroke-width="17"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="198" cy="86" r="15" fill="#0B0D0F"/>
+  <circle cx="198" cy="86" r="10.5" fill="#4FE3A0"/>
+</svg>

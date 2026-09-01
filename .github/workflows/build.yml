@@ -1,0 +1,83 @@
+# Builds the installers on GitHub's own machines and publishes them.
+#
+# The point of running here rather than locally is macOS: a Mac app should be
+# built on a Mac, and this is the only Mac in the project. Push a tag and both
+# installers appear as downloads on the Releases page.
+#
+#   git tag v2.0.1 && git push origin v2.0.1
+#
+# "Run workflow" on the Actions tab builds without publishing, if you just want
+# to check a change compiles on both platforms.
+name: Build
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+# Needed for the release step to attach the built files.
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # One platform failing shouldn't throw away the other's build.
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            name: Windows
+            target: --win
+          - os: macos-latest
+            name: macOS
+            # dmg as well as zip, because this runner is a Mac and can make one.
+            # The checked-in config stays zip-only so the build also works on
+            # Linux, where dmg creation is impossible.
+            target: --mac dmg zip
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # `npm ci` also fetches the bundled OCR model via the postinstall script.
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      # The parser tests use node --test with a glob, which bash expands and
+      # PowerShell does not — so they run on the Unix runner.
+      - if: runner.os == 'macOS'
+        run: npm test
+
+      - run: npm run dist -- ${{ matrix.target }}
+        env:
+          # No Apple Developer certificate, so skip signing rather than fail.
+          # Users get one right-click → Open on first launch.
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          if-no-files-found: error
+          path: |
+            release/*.exe
+            release/*.zip
+            release/*.dmg
+
+      - name: Publish to the release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: false
+          fail_on_unmatched_files: true
+          files: |
+            release/*.exe
+            release/*.zip
+            release/*.dmg
