@@ -26,6 +26,30 @@ export type Phase = "eval" | "funded" | "passed" | "blown";
 export type DayKind = "win" | "loss" | "flat";
 
 /**
+ * Which phase a session belongs to.
+ *
+ * New entries carry the stamp they were saved with, which is what lets you
+ * clear an evaluation and then trade the funded account the same afternoon —
+ * both sessions are on the same date and only one of them is funded.
+ *
+ * Entries logged before the stamp existed fall back to the date: on or before
+ * the pass is evaluation, after it is funded.
+ */
+export function dayPhase(day: DayDTO, account: AccountDTO): Phase {
+  if (day.phase) return day.phase;
+  if (!account.passedOn) return account.phase;
+  return day.date <= account.passedOn ? "eval" : "funded";
+}
+
+/** The sessions that count toward an account's current phase. */
+export function phaseDaysOf(account: AccountDTO, days: DayDTO[]): DayDTO[] {
+  return days
+    .filter((d) => d.accountId === account.id && dayPhase(d, account) === account.phase)
+    .slice()
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/**
  * Classifies a day. `band` is the breakeven tolerance in dollars: fees can leave
  * a scratch session at -$12, and that is a flat day, not a losing one.
  */
@@ -125,16 +149,9 @@ export function accountStatus(
   const rules = account.rules;
   const isProp = Boolean(account.firm);
 
-  const mine = allDays
-    .filter((d) => d.accountId === account.id)
-    .slice()
-    .sort((a, b) => a.date.localeCompare(b.date));
-
-  // Passing an evaluation resets the balance, so only days after the pass count
-  // toward the funded phase.
-  const phaseDays = account.passedOn
-    ? mine.filter((d) => d.date > account.passedOn!)
-    : mine;
+  // Passing an evaluation resets the balance, so only sessions logged in the
+  // current phase count toward it.
+  const phaseDays = phaseDaysOf(account, allDays);
 
   const phaseStart = account.passedOn ? account.size || account.start : account.start;
   const phaseNet = phaseDays.reduce((a, d) => a + d.net, 0);
@@ -174,7 +191,17 @@ export function accountStatus(
 
   // --- payout eligibility ---------------------------------------------------
   const pay = rules?.payout || NO_PAYOUT;
-  const winDays = phaseDays.filter((d) => d.net >= Math.max(pay.minWinDay, 0.01)).length;
+
+  // Winning days count from the last payout, not from funding: firms want the
+  // days done again before they will pay again.
+  const lastPayout = (account.payouts || [])
+    .map((p) => p.date)
+    .sort()
+    .pop();
+  const sinceLastPayout = lastPayout
+    ? phaseDays.filter((d) => d.date > lastPayout)
+    : phaseDays;
+  const winDays = sinceLastPayout.filter((d) => d.net >= Math.max(pay.minWinDay, 0.01)).length;
   const payoutFloor = (floor ?? phaseStart - (rules?.maxLoss || 0)) + pay.buffer;
 
   // Every cap applied at once — you can only have the smallest of them.
@@ -192,7 +219,9 @@ export function accountStatus(
     if (pay.minWinDays && winDays < pay.minWinDays) {
       const left = pay.minWinDays - winDays;
       payoutBlockers.push(
-        `${left} more winning ${left === 1 ? "day" : "days"} of ${pay.minWinDay ? `$${pay.minWinDay}+` : "profit"} — ${winDays} of ${pay.minWinDays} so far.`,
+        `${left} more winning ${left === 1 ? "day" : "days"} of ${
+          pay.minWinDay ? `$${pay.minWinDay}+` : "profit"
+        } — ${winDays} of ${pay.minWinDays}${lastPayout ? " since your last payout" : ""}.`,
       );
     }
     if (!consistencyOk) {

@@ -8,14 +8,16 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { dayKind, drawdownFloor, accountStatus, evalCleared, detectPhaseChange } from "../src/lib/account.ts";
+import { dayKind, dayPhase, drawdownFloor, accountStatus, evalCleared, detectPhaseChange } from "../src/lib/account.ts";
 import { rulesFor } from "../src/lib/propfirms.ts";
 import { agg } from "../src/lib/format.ts";
 import type { AccountDTO, DayDTO } from "../src/lib/types.ts";
 
-function day(date: string, net: number, wins = 1, losses = 0): DayDTO {
+let seq = 0;
+function day(date: string, net: number, wins = 1, losses = 0, phase?: "eval" | "funded"): DayDTO {
   return {
-    id: `d-${date}`,
+    phase,
+    id: `d-${date}-${seq++}`,
     accountId: "acc",
     date,
     net,
@@ -349,4 +351,89 @@ test("a payout dated before the pass still counts, so a wrong clock can't hide i
     payouts: [{ id: "p", date: "2026-09-01", amount: 400 }],
   });
   assert.equal(accountStatus(acc, [day("2026-09-11", 900)], 0).paidOut, 400);
+});
+
+test("a session is tied to the phase it was logged in, not its date", () => {
+  // You can clear an evaluation and trade the funded account the same
+  // afternoon. Both sessions carry the same date and only one is funded.
+  const acc = account({ phase: "funded", passedOn: "2026-10-01" });
+  const evalRun = day("2026-10-01", 300, 1, 0, "eval");
+  const firstFunded = day("2026-10-01", 222, 1, 0, "funded");
+
+  assert.equal(dayPhase(evalRun, acc), "eval");
+  assert.equal(dayPhase(firstFunded, acc), "funded");
+
+  const st = accountStatus(acc, [evalRun, firstFunded], 0);
+  assert.equal(st.phaseDays.length, 1, "only the funded session counts");
+  assert.equal(st.phaseNet, 222);
+  assert.equal(st.balance, 25222, "the evaluation's profit stays behind");
+});
+
+test("entries logged before the phase stamp existed fall back to the date", () => {
+  const acc = account({ phase: "funded", passedOn: "2026-10-01" });
+  const legacyEval = day("2026-09-30", 400); // no stamp
+  const legacyFunded = day("2026-10-02", 150); // no stamp
+  assert.equal(dayPhase(legacyEval, acc), "eval");
+  assert.equal(dayPhase(legacyFunded, acc), "funded");
+  assert.equal(accountStatus(acc, [legacyEval, legacyFunded], 0).phaseNet, 150);
+});
+
+test("the winning days start again after a payout", () => {
+  const rules = rulesFor("lucid", "flex", 50000); // 5 days over $150
+  const base = {
+    name: "LucidFlex 50K",
+    size: 50000,
+    start: 50000,
+    phase: "funded" as const,
+    passedOn: "2026-09-30",
+    rules,
+  };
+  const five = Array.from({ length: 5 }, (_, i) =>
+    day(`2026-10-0${i + 1}`, 400, 1, 0, "funded"),
+  );
+
+  assert.equal(accountStatus(account({ ...base }), five, 0).payoutReady, true);
+
+  // Take one, and the five days have to be done again.
+  const afterPayout = account({
+    ...base,
+    payouts: [{ id: "p", date: "2026-10-05", amount: 500 }],
+  });
+  let st = accountStatus(afterPayout, five, 0);
+  assert.equal(st.winDays, 0, "days before the payout don't count toward the next one");
+  assert.equal(st.payoutReady, false);
+  assert.match(st.payoutBlockers[0], /5 more winning days of \$150\+.*since your last payout/);
+
+  // Four more isn't enough; the fifth unlocks it.
+  const four = Array.from({ length: 4 }, (_, i) =>
+    day(`2026-10-1${i}`, 400, 1, 0, "funded"),
+  );
+  assert.equal(accountStatus(afterPayout, [...five, ...four], 0).payoutReady, false);
+  st = accountStatus(afterPayout, [...five, ...four, day("2026-10-20", 400, 1, 0, "funded")], 0);
+  assert.equal(st.winDays, 5);
+  assert.equal(st.payoutReady, true);
+});
+
+test("a LucidFlex payout is half the profit, capped by account size", () => {
+  // 25K: you need $2,000 of profit to reach the $1,000 ceiling.
+  const rules = rulesFor("lucid", "flex", 25000);
+  const acc = (net: number) => {
+    const days = Array.from({ length: 5 }, (_, i) =>
+      day(`2026-10-0${i + 1}`, net / 5, 1, 0, "funded"),
+    );
+    return accountStatus(
+      account({ phase: "funded", passedOn: "2026-09-30", rules }),
+      days,
+      0,
+    );
+  };
+
+  assert.equal(acc(1000).maxRequest, 500, "half of $1,000");
+  assert.equal(acc(2000).maxRequest, 1000, "half of $2,000 reaches the ceiling");
+  assert.equal(acc(5000).maxRequest, 1000, "and stops there");
+
+  // 50K's ceiling is $2,000, so it takes $4,000 of profit to reach it.
+  const big = rulesFor("lucid", "flex", 50000);
+  assert.equal(big.payout.maxPayout, 2000);
+  assert.equal(big.payout.maxProfitPct, 50);
 });

@@ -28,6 +28,13 @@ export type DayDTO = {
   id: string;
   accountId: string;
   date: string; // YYYY-MM-DD
+  /**
+   * The account phase this session was logged in. Stamped at save time rather
+   * than derived from the date, because you can pass an evaluation and then
+   * trade the funded account on the same day — and both entries are real.
+   * Absent on entries logged before this existed; `dayPhase()` infers those.
+   */
+  phase?: Phase;
   net: number;
   wins: number;
   losses: number;

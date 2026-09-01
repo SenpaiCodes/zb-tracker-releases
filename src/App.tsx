@@ -3,7 +3,8 @@ import type { AccountDTO, Journal } from "./lib/types";
 import { isDesktop, store, StoreError } from "./lib/store";
 import { shiftYm, todayIso, todayYm } from "./lib/format";
 import { applyTheme, DEFAULT_THEME, type ThemeChoice } from "./lib/theme";
-import { accountStatus, detectPhaseChange, evalCleared } from "./lib/account";
+import { accountStatus, dayPhase, detectPhaseChange, evalCleared } from "./lib/account";
+import { rulesFor } from "./lib/propfirms";
 import {
   accountName,
   allTimeAccount,
@@ -76,6 +77,33 @@ export default function App() {
     }
   }, []);
 
+  // One-off repair of accounts seeded from templates that were wrong: LucidFlex
+  // carries no consistency rule, and payout policies didn't exist when some
+  // accounts were created. Both conditions stop matching once fixed, so this
+  // settles after a single pass and never touches an account you have edited
+  // into a state the templates don't produce.
+  useEffect(() => {
+    if (!journal) return;
+    for (const a of journal.accounts) {
+      if (!a.firm) continue;
+      const template = rulesFor(a.firm, a.plan, a.size || 0);
+      const needsPayout = !a.rules.payout?.minWinDays && template.payout.minWinDays > 0;
+      const staleConsistency =
+        template.consistencyPct === 0 && (a.rules.consistencyPct || 0) > 0;
+      if (!needsPayout && !staleConsistency) continue;
+
+      commit(() =>
+        store.patchAccount(a.id, {
+          rules: {
+            ...a.rules,
+            consistencyPct: staleConsistency ? 0 : a.rules.consistencyPct,
+            payout: needsPayout ? template.payout : a.rules.payout,
+          },
+        }),
+      );
+    }
+  }, [journal, commit]);
+
   // Read the journal off disk once the user starts the app.
   useEffect(() => {
     if (!started || journal) return;
@@ -137,12 +165,15 @@ export default function App() {
   // Passing an evaluation starts the account again, so its own views show only
   // the funded phase — no green, red or flat days carried over from the
   // evaluation. Every one of them is still in All time, which is the record.
+  //
+  // Matched on the phase each session was logged in rather than its date, so a
+  // session traded on the funded account the same day it passed still appears.
   const activeDays = useMemo(() => {
     if (!journal || !viewAccount) return [];
     const days = daysForAccount(journal, viewAccount.id);
-    if (isVirtual(viewAccount.id) || !viewAccount.passedOn) return days;
-    return days.filter((d) => d.date > viewAccount.passedOn!);
-  }, [journal, viewAccount?.id, viewAccount?.passedOn]);
+    if (isVirtual(viewAccount.id)) return days;
+    return days.filter((d) => dayPhase(d, viewAccount) === viewAccount.phase);
+  }, [journal, viewAccount?.id, viewAccount?.phase, viewAccount?.passedOn]);
 
   // Where the current phase's equity starts, and the date it started on.
   // Passing an evaluation resets the balance and the profit that cleared it does
@@ -422,7 +453,7 @@ export default function App() {
         <DayDrawer
           days={selectedDays}
           accountFor={(id) => accountName(journal, id)}
-          showAccounts={Boolean(virtualId)}
+          showAccounts={Boolean(virtualId) || selectedDays.length > 1}
           onClose={() => setSelected(null)}
           onNote={(day, n) => commit(() => store.patchDay(day.id, { note: n }))}
           onAddShots={(day, shots) => commit(() => store.patchDay(day.id, { shots }))}

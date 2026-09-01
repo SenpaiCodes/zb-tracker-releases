@@ -55,8 +55,17 @@ src/lib/store.ts     renderer-side wrapper over the bridge
   function survives only as a safety valve past 24MB. `Lightbox` shows a real
   `<img>` with a 1:1 zoom rather than a capped background-image, and OCR reads
   the original `File` either way, so accuracy never depended on this.
-- **Re-saving a date** replaces that day's numbers and trades but *appends*
-  screenshots, so an earlier upload is never silently dropped.
+- **A date holds as many sessions as you logged.** `saveDay` always inserts;
+  it used to find the existing entry for that account and date and overwrite it,
+  which made a second session of the day look like the save had done nothing.
+  `DayDrawer` numbers them ("1 of 2") when one account has several on a date,
+  and the import no longer de-duplicates by date either.
+- **A session's phase is stamped at save time, not derived from its date.**
+  `day.phase` records the account's phase when it was logged, so you can clear an
+  evaluation and trade the funded account the same afternoon and both entries are
+  real. `dayPhase()` infers it from `passedOn` for entries predating the stamp.
+  Filter with `phaseDaysOf()`; comparing dates against `passedOn` silently ate
+  same-day sessions.
 - **Two bundled typefaces, deliberately.** Outfit carries the interface
   (geometric, round bowls, holds up at bold); JetBrains Mono carries every
   number, so columns of figures align. Don't put prose in the mono or figures in

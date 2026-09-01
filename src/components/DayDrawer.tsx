@@ -101,7 +101,10 @@ export default function DayDrawer({
             </h2>
             {days.length > 1 ? (
               <div style={{ fontSize: 12, color: C.faint }}>
-                {days.length} accounts traded ·{" "}
+                {new Set(days.map((d) => d.accountId)).size > 1
+                  ? `${days.length} sessions across ${new Set(days.map((d) => d.accountId)).size} accounts`
+                  : `${days.length} sessions`}{" "}
+                ·{" "}
                 <span style={{ fontFamily: MONO, color: colorFor(total) }}>{money(total)}</span>{" "}
                 combined
               </div>
@@ -128,10 +131,20 @@ export default function DayDrawer({
 
         {days.length > 1 || showAccounts ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <div style={caption()}>{days.length > 1 ? "Which account" : "Account"}</div>
+            <div style={caption()}>
+              {days.length > 1 ? "Which session" : "Account"}
+            </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
               {days.map((d, i) => {
                 const on = d.id === day.id;
+                // Two sessions on one account and one date need telling apart,
+                // so they are numbered in the order they were logged.
+                const name = accountFor(d.accountId);
+                const sameAccount = days.filter((x) => x.accountId === d.accountId);
+                const label =
+                  sameAccount.length > 1
+                    ? `${name} · ${sameAccount.indexOf(d) + 1} of ${sameAccount.length}`
+                    : name;
                 return (
                   <button
                     key={d.id}
@@ -153,7 +166,7 @@ export default function DayDrawer({
                       fontWeight: on ? 600 : 500,
                     }}
                   >
-                    {accountFor(d.accountId)}
+                    {label}
                     <span style={{ fontFamily: MONO, fontSize: 11.5, color: colorFor(d.net) }}>
                       {money(d.net)}
                     </span>

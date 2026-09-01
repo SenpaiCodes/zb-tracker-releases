@@ -193,7 +193,14 @@ class Store {
           ? Number(d.breakevenBand)
           : DEFAULT_BREAKEVEN_BAND,
       ),
-      days: (d.days || []).filter((day) => ids.has(day.accountId)),
+      days: (d.days || [])
+        .filter((day) => ids.has(day.accountId))
+        .map((day) => ({
+          ...day,
+          phase: ["eval", "funded", "passed", "blown"].includes(day.phase)
+            ? day.phase
+            : undefined,
+        })),
     };
   }
 
@@ -300,28 +307,30 @@ class Store {
       trades,
     };
 
-    this.writeDay(accountId, date, fields, shots);
+    const account = this.data.accounts.find((a) => a.id === accountId);
+    this.writeDay(accountId, date, fields, shots, account ? account.phase : undefined);
 
     // Copy-traded: the same session ran on other accounts, so each gets its own
     // copy of the day. The screenshot stays with the account it was taken on.
     const copies = (input.copyTo || []).filter(
       (id) => id !== accountId && this.data.accounts.some((a) => a.id === id && !a.archived),
     );
-    for (const id of new Set(copies)) this.writeDay(id, date, fields, []);
+    for (const id of new Set(copies)) {
+      const acc = this.data.accounts.find((a) => a.id === id);
+      this.writeDay(id, date, fields, [], acc ? acc.phase : undefined);
+    }
 
     return this.save();
   }
 
-  /** Inserts or replaces one account's day. Screenshots always accumulate. */
-  writeDay(accountId, date, fields, shots) {
-    const existing = this.data.days.find((d) => d.accountId === accountId && d.date === date);
-    if (existing) {
-      // Re-saving a date replaces its numbers and trades, but screenshots
-      // accumulate so an earlier upload is never silently dropped.
-      Object.assign(existing, fields, { shots: [...(existing.shots || []), ...shots] });
-    } else {
-      this.data.days.push({ id: newId("day"), accountId, date, ...fields, shots });
-    }
+  /**
+   * Adds one session. A date can hold several — two sessions in a day, or one
+   * that cleared an evaluation and another on the funded account the same
+   * afternoon. Logging a date that already has an entry used to overwrite it,
+   * which looked like the save doing nothing at all.
+   */
+  writeDay(accountId, date, fields, shots, phase) {
+    this.data.days.push({ id: newId("day"), accountId, date, phase, ...fields, shots });
   }
 
   patchDay(id, patch) {
@@ -580,21 +589,20 @@ class Store {
     if (!accounts.length) throw new Error("That export has no trading accounts.");
 
     const fallback = accounts[0].id;
-    const seen = new Set();
     const days = [];
 
     for (const d of payload.days) {
       const date = String(d.date || "");
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+      // No de-duplication by date: a date can legitimately hold more than one
+      // session, and collapsing them would quietly discard a backup's entries.
       const accountId = idMap.get(d.accountId) || fallback;
-      const key = `${accountId}:${date}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
 
       days.push({
         id: newId("day"),
         accountId,
         date,
+        phase: ["eval", "funded", "passed", "blown"].includes(d.phase) ? d.phase : undefined,
         net: Math.round(Number(d.net) || 0),
         wins: Math.max(0, Math.round(Number(d.wins) || 0)),
         losses: Math.max(0, Math.round(Number(d.losses) || 0)),
