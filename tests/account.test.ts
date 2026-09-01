@@ -378,6 +378,35 @@ test("entries logged before the phase stamp existed fall back to the date", () =
   assert.equal(accountStatus(acc, [legacyEval, legacyFunded], 0).phaseNet, 150);
 });
 
+test("a payout consumes the sessions it was drawn against, whatever their dates", () => {
+  // The bug: comparing dates meant a session dated ahead of the payout survived
+  // it and still counted toward the next one. Firms restart the count outright.
+  const rules = rulesFor("lucid", "flex", 50000); // 5 days over $150
+  const five = Array.from({ length: 5 }, (_, i) =>
+    day(`2026-10-0${i + 1}`, 400, 1, 0, "funded"),
+  );
+  const acc = account({
+    name: "LucidFlex 50K",
+    size: 50000,
+    start: 50000,
+    phase: "funded",
+    passedOn: "2026-09-30",
+    rules,
+    // Requested on a date *earlier* than four of the five sessions.
+    payouts: [
+      { id: "p", date: "2026-10-01", amount: 500, consumed: five.map((d) => d.id) },
+    ],
+  });
+
+  const st = accountStatus(acc, five, 0);
+  assert.equal(st.winDays, 0, "every session it was drawn against is spent");
+  assert.equal(st.payoutReady, false);
+
+  // Only sessions logged after it count toward the next one.
+  const after = accountStatus(acc, [...five, day("2026-10-09", 400, 1, 0, "funded")], 0);
+  assert.equal(after.winDays, 1);
+});
+
 test("the winning days start again after a payout", () => {
   const rules = rulesFor("lucid", "flex", 50000); // 5 days over $150
   const base = {
@@ -397,7 +426,7 @@ test("the winning days start again after a payout", () => {
   // Take one, and the five days have to be done again.
   const afterPayout = account({
     ...base,
-    payouts: [{ id: "p", date: "2026-10-05", amount: 500 }],
+    payouts: [{ id: "p", date: "2026-10-05", amount: 500, consumed: five.map((d) => d.id) }],
   });
   let st = accountStatus(afterPayout, five, 0);
   assert.equal(st.winDays, 0, "days before the payout don't count toward the next one");
@@ -408,6 +437,7 @@ test("the winning days start again after a payout", () => {
   const four = Array.from({ length: 4 }, (_, i) =>
     day(`2026-10-1${i}`, 400, 1, 0, "funded"),
   );
+  assert.equal(accountStatus(afterPayout, [...five, ...four], 0).winDays, 4);
   assert.equal(accountStatus(afterPayout, [...five, ...four], 0).payoutReady, false);
   st = accountStatus(afterPayout, [...five, ...four, day("2026-10-20", 400, 1, 0, "funded")], 0);
   assert.equal(st.winDays, 5);

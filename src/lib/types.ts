@@ -78,6 +78,16 @@ export type PayoutDTO = {
   /** YYYY-MM-DD the payout was requested. */
   date: string;
   amount: number;
+  /**
+   * Ids of the sessions this payout consumed — every one that had been logged
+   * when it was requested.
+   *
+   * Firms restart the winning-day count at each payout, and the day you request
+   * on doesn't carry over either. Working that out by comparing dates breaks as
+   * soon as an entry is dated ahead of the payout, so the entries themselves are
+   * recorded instead. Absent on payouts taken before this existed.
+   */
+  consumed?: string[];
 };
 
 export type Journal = {

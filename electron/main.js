@@ -133,7 +133,9 @@ function registerIpc() {
   handle("journal:patchAccount", (id, patch) => store.patchAccount(id, patch));
   handle("journal:deleteAccount", (id) => store.deleteAccount(id));
   handle("journal:archiveAccount", (id) => store.archiveAccount(id));
-  handle("journal:addPayout", (id, amount, date) => store.addPayout(id, amount, date));
+  handle("journal:addPayout", (id, amount, date, consumed) =>
+    store.addPayout(id, amount, date, consumed),
+  );
   handle("journal:deletePayout", (id, payoutId) => store.deletePayout(id, payoutId));
   handle("journal:restoreAccount", (id) => store.restoreAccount(id));
   handle("journal:setTheme", (theme) => store.setTheme(theme));

@@ -37,7 +37,12 @@ type Bridge = {
   patchAccount: (id: string, patch: AccountPatch) => Promise<Result<Journal>>;
   deleteAccount: (id: string) => Promise<Result<Journal>>;
   archiveAccount: (id: string) => Promise<Result<Journal>>;
-  addPayout: (id: string, amount: number, date: string) => Promise<Result<Journal>>;
+  addPayout: (
+    id: string,
+    amount: number,
+    date: string,
+    consumed: string[],
+  ) => Promise<Result<Journal>>;
   deletePayout: (id: string, payoutId: string) => Promise<Result<Journal>>;
   restoreAccount: (id: string) => Promise<Result<Journal>>;
   setTheme: (theme: ThemeChoice) => Promise<Result<Journal>>;
@@ -112,8 +117,8 @@ export const store = {
     withUrls(await unwrap(bridge().patchAccount(id, patch))),
   deleteAccount: async (id: string) => withUrls(await unwrap(bridge().deleteAccount(id))),
   archiveAccount: async (id: string) => withUrls(await unwrap(bridge().archiveAccount(id))),
-  addPayout: async (id: string, amount: number, date: string) =>
-    withUrls(await unwrap(bridge().addPayout(id, amount, date))),
+  addPayout: async (id: string, amount: number, date: string, consumed: string[]) =>
+    withUrls(await unwrap(bridge().addPayout(id, amount, date, consumed))),
   deletePayout: async (id: string, payoutId: string) =>
     withUrls(await unwrap(bridge().deletePayout(id, payoutId))),
   restoreAccount: async (id: string) => withUrls(await unwrap(bridge().restoreAccount(id))),

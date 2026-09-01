@@ -16,7 +16,8 @@ contextBridge.exposeInMainWorld("zbtracker", {
   patchAccount: (id, patch) => call("journal:patchAccount", id, patch),
   deleteAccount: (id) => call("journal:deleteAccount", id),
   archiveAccount: (id) => call("journal:archiveAccount", id),
-  addPayout: (id, amount, date) => call("journal:addPayout", id, amount, date),
+  addPayout: (id, amount, date, consumed) =>
+    call("journal:addPayout", id, amount, date, consumed),
   deletePayout: (id, payoutId) => call("journal:deletePayout", id, payoutId),
   restoreAccount: (id) => call("journal:restoreAccount", id),
   setTheme: (theme) => call("journal:setTheme", theme),

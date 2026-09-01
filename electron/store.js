@@ -93,6 +93,9 @@ function normalizeAccount(a) {
             id: typeof x.id === "string" ? x.id : newId("pay"),
             date: /^\d{4}-\d{2}-\d{2}$/.test(String(x.date)) ? x.date : todayIso(),
             amount: Math.max(0, Math.round(Number(x.amount) || 0)),
+            consumed: Array.isArray(x.consumed)
+              ? x.consumed.filter((id) => typeof id === "string")
+              : undefined,
           }))
           .filter((x) => x.amount > 0)
       : [],
@@ -478,7 +481,7 @@ class Store {
    * this is simply what the user says they requested — it comes straight off the
    * journal's balance and the drawdown cushion with it.
    */
-  addPayout(id, amount, date) {
+  addPayout(id, amount, date, consumed) {
     const acc = this.data.accounts.find((a) => a.id === id);
     if (!acc) throw new Error("No such account.");
     const value = Math.round(Number(amount) || 0);
@@ -487,6 +490,11 @@ class Store {
       id: newId("pay"),
       date: /^\d{4}-\d{2}-\d{2}$/.test(String(date)) ? date : todayIso(),
       amount: value,
+      // Everything logged so far is spent on this payout; the next one needs
+      // the winning days done again.
+      consumed: Array.isArray(consumed)
+        ? consumed.filter((x) => typeof x === "string")
+        : this.data.days.filter((d) => d.accountId === id).map((d) => d.id),
     });
     return this.save();
   }

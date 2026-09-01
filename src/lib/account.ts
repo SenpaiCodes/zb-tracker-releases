@@ -192,16 +192,24 @@ export function accountStatus(
   // --- payout eligibility ---------------------------------------------------
   const pay = rules?.payout || NO_PAYOUT;
 
-  // Winning days count from the last payout, not from funding: firms want the
-  // days done again before they will pay again.
-  const lastPayout = (account.payouts || [])
-    .map((p) => p.date)
-    .sort()
-    .pop();
-  const sinceLastPayout = lastPayout
-    ? phaseDays.filter((d) => d.date > lastPayout)
-    : phaseDays;
-  const winDays = sinceLastPayout.filter((d) => d.net >= Math.max(pay.minWinDay, 0.01)).length;
+  // Firms restart the winning-day count at every payout — Topstep's policy puts
+  // it plainly, and the day you request on doesn't carry over either. So a
+  // payout *consumes* the sessions logged up to that point, tracked by id.
+  //
+  // This used to compare dates against the payout's date, which counted any
+  // session dated after it — including ones already logged. An entry dated even
+  // a day ahead survived a payout it should have been spent on.
+  const payouts = account.payouts || [];
+  const consumed = new Set(payouts.flatMap((p) => p.consumed || []));
+
+  // Payouts taken before ids were recorded fall back to the date comparison.
+  const undated = payouts.filter((p) => !p.consumed).map((p) => p.date).sort().pop();
+
+  const countable = phaseDays.filter(
+    (d) => !consumed.has(d.id) && (!undated || d.date > undated),
+  );
+  const winDays = countable.filter((d) => d.net >= Math.max(pay.minWinDay, 0.01)).length;
+  const hasPaid = payouts.length > 0;
   const payoutFloor = (floor ?? phaseStart - (rules?.maxLoss || 0)) + pay.buffer;
 
   // Every cap applied at once — you can only have the smallest of them.
@@ -221,7 +229,7 @@ export function accountStatus(
       payoutBlockers.push(
         `${left} more winning ${left === 1 ? "day" : "days"} of ${
           pay.minWinDay ? `$${pay.minWinDay}+` : "profit"
-        } — ${winDays} of ${pay.minWinDays}${lastPayout ? " since your last payout" : ""}.`,
+        } — ${winDays} of ${pay.minWinDays}${hasPaid ? " since your last payout" : ""}.`,
       );
     }
     if (!consistencyOk) {

@@ -337,13 +337,16 @@ export default function App() {
           });
         }}
         onPayout={(amount) => {
-          if (!target) return;
+          if (!target || !phase) return;
           const { id, name } = target;
+          // The sessions this payout is drawn against. Recording them is what
+          // makes the winning-day count restart properly afterwards.
+          const spent = phase.phaseDays.map((d) => d.id);
           setCelebrating({
             kind: "payout",
             name,
             amount,
-            apply: () => commit(() => store.addPayout(id, amount, todayIso())),
+            apply: () => commit(() => store.addPayout(id, amount, todayIso(), spent)),
           });
         }}
         onRetire={() => {
