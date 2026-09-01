@@ -35,7 +35,11 @@ jobs:
             # dmg as well as zip, because this runner is a Mac and can make one.
             # The checked-in config stays zip-only so the build also works on
             # Linux, where dmg creation is impossible.
-            target: --mac dmg zip
+            #
+            # Both architectures spelled out: naming targets on the command line
+            # discards the arch list from the config, and the runner is Apple
+            # Silicon — so without this, Intel Macs get nothing.
+            target: --mac dmg zip --x64 --arm64
 
     steps:
       - uses: actions/checkout@v4
@@ -72,8 +76,8 @@ jobs:
           if-no-files-found: error
           path: |
             release/*.exe
-            release/*.zip
             release/*.dmg
+            release/*.zip
 
       - name: Publish to the release
         if: github.ref == 'refs/heads/main'
@@ -83,7 +87,10 @@ jobs:
           name: Z&B Tracker ${{ steps.ver.outputs.v }}
           draft: false
           make_latest: true
-          fail_on_unmatched_files: true
+          # Each platform only produces its own kind of file — the Windows job
+          # has no .dmg and the Mac job has no .exe — so an unmatched pattern is
+          # expected, not an error. Both jobs add to the same release.
+          fail_on_unmatched_files: false
           body: |
             **Windows** — download `ZB-Tracker-Setup-${{ steps.ver.outputs.v }}.exe` and run it.
             One click: it replaces any older version, keeps your journal, and launches.
