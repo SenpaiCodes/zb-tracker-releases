@@ -48,6 +48,13 @@ src/lib/store.ts     renderer-side wrapper over the bridge
   superseded replies. Route new mutations through it too.
 - **Screenshots are files, referenced as `app://shot/<file>`.** `store.shotPath()`
   refuses anything that escapes the shots folder; keep that check.
+- **Screenshots are stored exactly as taken.** `readShot()` writes the original
+  bytes — no resample, no re-encode, original format — because these are charts
+  people zoom into to re-read a wick. They were once run through a 1500px / 72%
+  JPEG `shrink()`, which is fine for a thumbnail and useless full-screen; that
+  function survives only as a safety valve past 24MB. `Lightbox` shows a real
+  `<img>` with a 1:1 zoom rather than a capped background-image, and OCR reads
+  the original `File` either way, so accuracy never depended on this.
 - **Re-saving a date** replaces that day's numbers and trades but *appends*
   screenshots, so an earlier upload is never silently dropped.
 - **Two bundled typefaces, deliberately.** Outfit carries the interface

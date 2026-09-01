@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { analyzeScreenshot, disposeOcr, type ParsedTrade } from "../lib/ocr";
-import { shrink } from "../lib/store";
+import { readShot } from "../lib/store";
 import { colorFor, monthName, money, todayIso } from "../lib/format";
 import { C, MONO, caption, cssUrl, field } from "./ui";
 
@@ -15,7 +15,7 @@ export type Draft = {
   /** Object URL for the on-screen preview. */
   pnlPreview: string | null;
   pnlFile: File | null;
-  /** Downscaled data URL, saved with the entry. */
+  /** The screenshot's own bytes as a data URL, saved with the entry. */
   pnlData: string | null;
   shots: { name: string; data: string }[];
   trades: ParsedTrade[];
@@ -89,7 +89,7 @@ export default function NewEntry({
       };
     });
     setScan(null);
-    shrink(file).then((data) => setDraft((d) => ({ ...d, pnlData: data })));
+    readShot(file).then((data) => setDraft((d) => ({ ...d, pnlData: data })));
   }
 
   async function analyze() {
@@ -432,7 +432,7 @@ export default function NewEntry({
                     const files = Array.from(e.target.files || []);
                     e.target.value = "";
                     for (const f of files) {
-                      const data = await shrink(f);
+                      const data = await readShot(f);
                       setDraft((d) => ({
                         ...d,
                         shots: [...d.shots, { name: f.name || "chart screenshot", data }],

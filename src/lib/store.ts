@@ -146,11 +146,33 @@ export const store = {
 export type { AccountDTO };
 
 /**
- * Downscales an image before it is written to disk. Full-resolution platform
- * screenshots are several megabytes; a 1500px JPEG stays legible in the gallery
- * at a fraction of the size.
+ * Keeps a screenshot exactly as it was taken.
+ *
+ * These are chart screenshots people zoom into to re-read a wick or a level, so
+ * quality is the whole point of storing them. The original bytes go to disk
+ * untouched — no re-encode, no resample, original format.
+ *
+ * The only exception is an absurdly large file, which is downscaled rather than
+ * refused: a 4K screenshot is a couple of megabytes, so anything past the cap is
+ * a photo or a poster, not a chart.
  */
-export function shrink(file: File, maxWidth = 1500, quality = 0.72): Promise<string> {
+const KEEP_ORIGINAL_UP_TO = 24 * 1024 * 1024;
+
+export function readShot(file: File): Promise<string> {
+  if (file.size > KEEP_ORIGINAL_UP_TO) return shrink(file, 3840, 0.95);
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error("That file could not be read"));
+    reader.readAsDataURL(file);
+  });
+}
+
+/**
+ * Re-encodes an image at a bounded width. Only used as the safety valve above —
+ * screenshots are otherwise stored as they arrived.
+ */
+export function shrink(file: File, maxWidth = 3840, quality = 0.95): Promise<string> {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
     const img = new Image();

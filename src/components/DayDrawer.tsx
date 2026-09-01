@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { DayDTO } from "../lib/types";
 import { colorFor, money } from "../lib/format";
-import { shrink } from "../lib/store";
+import { readShot } from "../lib/store";
 import { C, MONO, caption, cssUrl } from "./ui";
 
 type Props = {
@@ -329,7 +329,7 @@ export default function DayDrawer({
                   const shots = await Promise.all(
                     files.map(async (f) => ({
                       name: f.name || "chart screenshot",
-                      data: await shrink(f),
+                      data: await readShot(f),
                     })),
                   );
                   if (shots.length) onAddShots(day, shots);

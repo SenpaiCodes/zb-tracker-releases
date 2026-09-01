@@ -243,7 +243,7 @@ class Store {
     const m = /^data:(image\/[a-z+]+);base64,(.*)$/s.exec(String(dataUrl || ""));
     if (!m) return null;
     const id = newId("sh");
-    const ext = m[1] === "image/png" ? "png" : "jpg";
+    const ext = { "image/png": "png", "image/webp": "webp", "image/gif": "gif" }[m[1]] || "jpg";
     const file = `${id}.${ext}`;
     fs.writeFileSync(path.join(this.shotsDir, file), Buffer.from(m[2], "base64"));
     return { id, name: String(name || "screenshot").slice(0, 200), file };
@@ -552,7 +552,8 @@ class Store {
           const p = this.shotPath(s.file);
           if (!p) return [];
           try {
-            const mime = s.file.endsWith(".png") ? "image/png" : "image/jpeg";
+            const ext = s.file.slice(s.file.lastIndexOf(".") + 1).toLowerCase();
+            const mime = { png: "image/png", webp: "image/webp", gif: "image/gif" }[ext] || "image/jpeg";
             return [{ name: s.name, data: `data:${mime};base64,${fs.readFileSync(p).toString("base64")}` }];
           } catch {
             return [];
