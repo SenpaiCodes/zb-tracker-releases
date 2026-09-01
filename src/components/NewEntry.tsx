@@ -69,8 +69,12 @@ export default function NewEntry({
   const [mode, setMode] = useState<"auto" | "manual">("auto");
   const [dragging, setDragging] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
+  const [pasted, setPasted] = useState(false);
   const [scan, setScan] = useState<Scan>(null);
   const pnlInput = useRef<HTMLInputElement>(null);
+  // `analyzing` is state, so a handler that fired before the re-render would
+  // still see the old value. The ref is the honest in-flight flag.
+  const busy = useRef(false);
 
   // The recognizer holds a worker and its language data; release it when the
   // form goes away.
@@ -92,12 +96,42 @@ export default function NewEntry({
     readShot(file).then((data) => setDraft((d) => ({ ...d, pnlData: data })));
   }
 
-  async function analyze() {
-    if (!draft.pnlFile || analyzing) return;
+  // Ctrl/Cmd+V anywhere on the page: take the image off the clipboard, attach
+  // it, and read it without waiting for a second click. The file is passed
+  // straight through because `draft.pnlFile` is a render behind at that point.
+  const pasteRef = useRef<(e: ClipboardEvent) => void>(() => {});
+
+  useEffect(() => {
+    const handler = (e: ClipboardEvent) => pasteRef.current(e);
+    window.addEventListener("paste", handler);
+    return () => window.removeEventListener("paste", handler);
+  }, []);
+
+  pasteRef.current = (e: ClipboardEvent) => {
+    if (busy.current) return;
+    const file = imageFrom(e.clipboardData);
+    if (!file) return; // a plain text paste still belongs to whatever has focus
+    e.preventDefault();
+    setMode("auto");
+    setPasted(true);
+    attach(file);
+    void analyze(file);
+  };
+
+  useEffect(() => {
+    if (!pasted) return;
+    const t = setTimeout(() => setPasted(false), 1400);
+    return () => clearTimeout(t);
+  }, [pasted]);
+
+  async function analyze(file?: File) {
+    const shot = file || draft.pnlFile;
+    if (!shot || busy.current) return;
+    busy.current = true;
     setAnalyzing(true);
-    setScan({ ok: true, msg: "Reading the screenshot…" });
+    setScan({ ok: true, msg: file ? "Pasted — reading it now…" : "Reading the screenshot…" });
     try {
-      const r = await analyzeScreenshot(draft.pnlFile, (msg) => setScan({ ok: true, msg }));
+      const r = await analyzeScreenshot(shot, (msg) => setScan({ ok: true, msg }));
 
       const detected: Record<string, boolean> = {};
       setDraft((d) => {
@@ -152,6 +186,7 @@ export default function NewEntry({
         msg: `Analysis failed (${String(reason).slice(0, 90)}) — type the numbers in below`,
       });
     } finally {
+      busy.current = false;
       setAnalyzing(false);
     }
   }
@@ -239,7 +274,7 @@ export default function NewEntry({
             }}
           >
             <div style={{ ...caption(), whiteSpace: "nowrap" }}>
-              1 · Drop your P&amp;L screenshot
+              1 · Paste your P&amp;L screenshot
             </div>
             <div
               style={{
@@ -252,7 +287,7 @@ export default function NewEntry({
                 ? scan.msg
                 : hasShot
                   ? "Screenshot attached — hit Analyze to read the numbers"
-                  : "Auto mode: drop the panel, then Analyze"}
+                  : `Press ${pasteKey()} — it reads itself`}
             </div>
           </div>
 
@@ -265,7 +300,7 @@ export default function NewEntry({
             onDrop={(e) => {
               e.preventDefault();
               setDragging(false);
-              const f = e.dataTransfer.files?.[0];
+              const f = imageFrom(e.dataTransfer);
               if (f) attach(f);
             }}
             style={{
@@ -275,9 +310,10 @@ export default function NewEntry({
               justifyContent: "center",
               gap: 12,
               minHeight: 250,
-              border: `1px dashed ${dragging ? C.pos : C.dash}`,
+              border: `1px dashed ${dragging || pasted ? C.pos : C.dash}`,
               borderRadius: 12,
-              background: dragging ? C.posSoft : C.field,
+              background: dragging || pasted ? C.posSoft : C.field,
+              transition: "border-color 180ms ease, background 180ms ease",
               cursor: "pointer",
               padding: 18,
               textAlign: "center",
@@ -311,13 +347,15 @@ export default function NewEntry({
                     display: "block",
                   }}
                 />
-                <span style={{ fontSize: 13.5, color: C.dim }}>Drop the daily P&amp;L panel here</span>
+                <span style={{ fontSize: 13.5, color: C.dim }}>
+                  Paste it with {pasteKey()} — or drop it here
+                </span>
                 <span
                   style={{ fontFamily: MONO, fontSize: 10.5, color: C.fainter, lineHeight: 1.7 }}
                 >
                   net p&amp;l · win/loss · contracts · date
                   <br />
-                  png or jpg — or click to browse
+                  a pasted screenshot analyzes itself · or click to browse
                 </span>
               </span>
             )}
@@ -336,7 +374,7 @@ export default function NewEntry({
 
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <button
-              onClick={analyze}
+              onClick={() => void analyze()}
               disabled={!hasShot || analyzing}
               className="hov-bright-soft"
               style={{
@@ -367,7 +405,7 @@ export default function NewEntry({
                 ? "Analyzing screenshot…"
                 : hasShot
                   ? "Analyze screenshot"
-                  : "Drop a screenshot to analyze"}
+                  : `Paste or drop a screenshot (${pasteKey()})`}
             </button>
             <button
               onClick={() => pnlInput.current?.click()}
@@ -773,6 +811,27 @@ export default function NewEntry({
       </div>
     </div>
   );
+}
+
+/** Mac keyboards say ⌘V; everything else says Ctrl+V. */
+function pasteKey(): string {
+  const mac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform || "");
+  return mac ? "⌘V" : "Ctrl+V";
+}
+
+/**
+ * The first image on a clipboard or a drag. Screenshot tools hand it over as an
+ * item rather than a file, so both shelves get looked at.
+ */
+function imageFrom(data: DataTransfer | null): File | null {
+  if (!data) return null;
+  for (const item of Array.from(data.items || [])) {
+    if (item.kind === "file" && item.type.startsWith("image/")) {
+      const file = item.getAsFile();
+      if (file) return file;
+    }
+  }
+  return Array.from(data.files || []).find((f) => f.type.startsWith("image/")) || null;
 }
 
 const labelCol: React.CSSProperties = {
