@@ -13,6 +13,19 @@ const FILE_VERSION = 3;
 
 // Seeded on first run; the user edits the list freely from Settings.
 const DEFAULT_TAGS = [
+  "OLHC",
+  "OHLC",
+  "Bullish",
+  "Bearish",
+  "Judas Swing",
+  "Continuation",
+  "HTF Manipulation",
+];
+
+// The list shipped before those. A journal still carrying it untouched never
+// had the palette edited, so it gets the new one; a list with any change in it
+// is the user's and is left exactly as it is.
+const SUPERSEDED_TAGS = [
   "ORB",
   "Failed breakout",
   "Trend day",
@@ -188,7 +201,8 @@ class Store {
     ).map(normalizeAccount);
     const ids = new Set(accounts.map((a) => a.id));
     // An older file has no tag list; seed it rather than leaving the picker empty.
-    const presetTags = Array.isArray(d.presetTags) ? cleanTags(d.presetTags) : DEFAULT_TAGS.slice();
+    let presetTags = Array.isArray(d.presetTags) ? cleanTags(d.presetTags) : DEFAULT_TAGS.slice();
+    if (isSuperseded(presetTags)) presetTags = DEFAULT_TAGS.slice();
     return {
       version: FILE_VERSION,
       accounts,
@@ -665,6 +679,13 @@ function cleanTags(list) {
     if (out.length >= MAX_TAGS) break;
   }
   return out;
+}
+
+/** True only for the old seed list, untouched — order and all. */
+function isSuperseded(tags) {
+  return (
+    tags.length === SUPERSEDED_TAGS.length && tags.every((t, i) => t === SUPERSEDED_TAGS[i])
+  );
 }
 
 function todayIso() {
