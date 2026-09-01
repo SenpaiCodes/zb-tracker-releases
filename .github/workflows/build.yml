@@ -4,15 +4,14 @@
 # built on a Mac, and this is the only Mac in the project. Push a tag and both
 # installers appear as downloads on the Releases page.
 #
-#   git tag v2.0.1 && git push origin v2.0.1
-#
-# "Run workflow" on the Actions tab builds without publishing, if you just want
-# to check a change compiles on both platforms.
+# It runs on every push to main and publishes a release named after the version
+# in package.json, creating the tag itself. Bump that version for a new release;
+# pushing again without bumping updates the existing one in place.
 name: Build
 
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
   workflow_dispatch:
 
 # Needed for the release step to attach the built files.
@@ -40,6 +39,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Read the version
+        id: ver
+        shell: bash
+        run: echo "v=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-node@v4
         with:
@@ -72,11 +76,25 @@ jobs:
             release/*.dmg
 
       - name: Publish to the release
-        if: startsWith(github.ref, 'refs/tags/')
+        if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: v${{ steps.ver.outputs.v }}
+          name: Z&B Tracker ${{ steps.ver.outputs.v }}
           draft: false
+          make_latest: true
           fail_on_unmatched_files: true
+          body: |
+            **Windows** — download `ZB-Tracker-Setup-${{ steps.ver.outputs.v }}.exe` and run it.
+            One click: it replaces any older version, keeps your journal, and launches.
+
+            **macOS** — download the `.dmg` for your Mac (`arm64` for M1–M4, the other
+            for Intel). Neither build is signed with an Apple certificate, so the first
+            launch needs a right-click → **Open** → **Open**. Once only.
+
+            Your journal lives outside the app and is never touched by installing or
+            uninstalling: `%APPDATA%\ZB Tracker` on Windows,
+            `~/Library/Application Support/ZB Tracker` on macOS.
           files: |
             release/*.exe
             release/*.zip
