@@ -42,10 +42,15 @@ win:
   # both, which is what previously left the app wearing Electron's default icon.
   signExecutable: false
 
+# Ad-hoc signs the macOS app — see the file for why "damaged" happens without it.
+afterPack: build/afterPack.js
+
 mac:
-  # Unsigned: there is no Apple Developer certificate, so Gatekeeper will need
-  # the right-click → Open dance on first run. A zip rather than a dmg because
-  # dmg creation needs macOS itself (hdiutil), and this builds on Linux.
+  # No Apple Developer certificate, so the app is ad-hoc signed rather than
+  # properly signed: Gatekeeper still asks on first run and a right-click → Open
+  # gets past it. Without the ad-hoc pass, Apple Silicon refuses outright.
+  # A zip as well as a dmg because dmg creation needs macOS itself (hdiutil),
+  # and this config also has to build on Linux.
   target:
     - target: zip
       arch: [x64, arm64]
