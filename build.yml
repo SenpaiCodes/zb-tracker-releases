@@ -99,9 +99,21 @@ jobs:
             **Windows** — download `ZB-Tracker-Setup-${{ steps.ver.outputs.v }}.exe` and run it.
             One click: it replaces any older version, keeps your journal, and launches.
 
-            **macOS** — download the `.dmg` for your Mac (`arm64` for M1–M4, the other
-            for Intel). Neither build is signed with an Apple certificate, so the first
-            launch needs a right-click → **Open** → **Open**. Once only.
+            **macOS** — download the `.dmg` for your Mac: `arm64` for Apple silicon
+            (M1 and later), the other for Intel. Drag the app to Applications.
+
+            Neither build is signed with an Apple certificate, so the first launch is
+            blocked with *"Apple could not verify…"*. To allow it, **once**:
+
+            1. Open the app. On the warning, click **Done** — not *Move to Trash*.
+            2. Go to  → **System Settings** → **Privacy & Security**.
+            3. Scroll to **Security**. There is a line saying Z&B Tracker was blocked,
+               with an **Open Anyway** button. Click it, then **Open Anyway** again
+               and enter your password or Touch ID.
+
+            The button only appears in the hour after you tried to launch it, so if it
+            is not there, open the app again first. Right-click → Open no longer works
+            as a shortcut for this — Apple removed it in macOS Sequoia.
 
             Your journal lives outside the app and is never touched by installing or
             uninstalling: `%APPDATA%\ZB Tracker` on Windows,
