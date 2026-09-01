@@ -10,6 +10,11 @@ directories:
   output: release
   buildResources: build
 
+# Explicit rather than inherited: the installer is downloaded once and unpacked
+# once, so trading build time for a smaller download is always right. Left to
+# the default, the CI build came out roughly twice the size of the local one.
+compression: maximum
+
 # Only what the app actually needs at runtime. React, Tesseract and the UI are
 # already bundled into dist/ by Vite, so no node_modules ship at all.
 files:
